@@ -104,21 +104,36 @@
 
 本部分从最基本的Spring开始。配置文件:
 
+spring 原生代码：org.springframework.context.support.ClassPathXmlApplicationContextTests#testSingleConfigLocation
+
+
+
 ```xml
-<?xml version="1.0" encoding="UTF-8"?>    
-<beans>    
-    <bean class="base.SimpleBean"></bean>
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE beans PUBLIC "-//SPRING//DTD BEAN 2.0//EN" "https://www.springframework.org/dtd/spring-beans-2.0.dtd">
+
+<beans>
+
+	<bean id="someMessageSource" name="yourMessageSource"
+			class="org.springframework.context.support.StaticMessageSource"/>
+
+	<bean class="org.springframework.context.support.ClassPathXmlApplicationContext" lazy-init="true">
+		<constructor-arg value="someNonExistentFile.xml"/>
+	</bean>
+
 </beans>
 ```
 
 启动代码:
 
 ```java
-public static void main(String[] args) {
-    ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext("config.xml");
-    SimpleBean bean = context.getBean(SimpleBean.class);
-    bean.send();
-    context.close();
+private static final String PATH = "/org/springframework/context/support/";
+private static final String FQ_SIMPLE_CONTEXT = PATH + "simpleContext.xml";
+@Test
+public void testSingleConfigLocation() {
+    ClassPathXmlApplicationContext ctx = new ClassPathXmlApplicationContext(FQ_SIMPLE_CONTEXT);
+    assertThat(ctx.containsBean("someMessageSource")).isTrue();
+    ctx.close();
 }
 ```
 
@@ -138,7 +153,9 @@ public class SimpleBean {
 
 ![ResourceLoader继承体系](images/ResourceLoader.jpg)
 
-ResourceLoader代表了**加载资源的一种方式，正是策略模式的实现**。
+PathMatchingResourcePatternResolver代表了**加载资源的一种方式，正是策略模式的实现**。
+
+![image-20200606214634774](Spring.assets/image-20200606214634774.png)
 
 构造器源码:
 
@@ -163,20 +180,823 @@ public AbstractApplicationContext(ApplicationContext parent) {
     this();
     setParent(parent);
 }
+
 public AbstractApplicationContext() {
     this.resourcePatternResolver = getResourcePatternResolver();
 }
-```
 
-getResourcePatternResolver:
-
-```java
 protected ResourcePatternResolver getResourcePatternResolver() {
     return new PathMatchingResourcePatternResolver(this);
 }
 ```
 
 PathMatchingResourcePatternResolver支持Ant风格的路径解析。
+
+这里对new PathMatchingResourcePatternResolver(this);产生了一个疑问🤔️。
+
+```java
+# 为什么 这个class都没跑完初始化方法就可以使用this了。
+    
+使用的这个this到底是什么？
+
+然后做了一下的例子。
+public class Constructor {
+
+    String o;
+
+    Constructor() {
+        System.out.println(this);
+    }
+
+    static class Test extends Constructor{
+        Test() {
+            System.out.println(this);
+        }
+    }
+
+    static class Test2 extends Test {
+        Test2() {
+            System.out.println(this);
+        }
+    }
+
+    public static void main(String[] args) {
+        System.out.println(new Constructor());
+        System.out.println(new Test());
+        System.out.println(new Test2());
+    }
+}    
+```
+
+先来看看执行的效果：
+
+![image-20200607163458564](Spring.assets/image-20200607163458564.png)
+
+这个例子发现this都可以在构造函数中使用，为什么能在构造函数中使用呢？我们看看这个文件的编译的结果：这里看看编译的路径下面会有三个文件(java内部类会自动帮我们切割好)：
+
+![image-20200607163837696](Spring.assets/image-20200607163837696.png)
+
+反编译这三个文件可以得到：
+
+```java
+Constructor文件，这里只是贴出来构造方法的文件
+{
+  java.lang.String o;
+    descriptor: Ljava/lang/String;
+    flags: (0x0000)
+
+  com.taldh.unkown.Constructor();
+    descriptor: ()V
+    flags: (0x0000)
+    Code:
+      stack=2, locals=1, args_size=1
+         0: aload_0
+         1: invokespecial #1                  // Method java/lang/Object."<init>":()V
+         4: getstatic     #7                  // Field java/lang/System.out:Ljava/io/PrintStream;
+         7: aload_0
+         8: invokevirtual #13                 // Method java/io/PrintStream.println:(Ljava/lang/Object;)V
+        11: return
+      LineNumberTable:
+        line 14: 0
+        line 15: 4
+        line 16: 11
+      LocalVariableTable:
+        Start  Length  Slot  Name   Signature
+            0      12     0  this   Lcom/taldh/unkown/Constructor;
+    
+Constructor$Test 字节码指令解析
+{
+  com.taldh.unkown.Constructor$Test();
+    descriptor: ()V
+    flags: (0x0000)
+    Code:
+      stack=2, locals=1, args_size=1
+         0: aload_0
+         1: invokespecial #1                  // Method com/taldh/unkown/Constructor."<init>":()V
+         4: getstatic     #7                  // Field java/lang/System.out:Ljava/io/PrintStream;
+         7: aload_0
+         8: invokevirtual #13                 // Method java/io/PrintStream.println:(Ljava/lang/Object;)V
+        11: return
+      LineNumberTable:
+        line 19: 0
+        line 20: 4
+        line 21: 11
+      LocalVariableTable:
+        Start  Length  Slot  Name   Signature
+            0      12     0  this   Lcom/taldh/unkown/Constructor$Test
+Constructor$Test2 字节码指令解析            
+{
+  com.taldh.unkown.Constructor$Test();
+    descriptor: ()V
+    flags: (0x0000)
+    Code:
+      stack=2, locals=1, args_size=1
+         0: aload_0
+         1: invokespecial #1                  // Method com/taldh/unkown/Constructor."<init>":()V
+         4: getstatic     #7                  // Field java/lang/System.out:Ljava/io/PrintStream;
+         7: aload_0
+         8: invokevirtual #13                 // Method java/io/PrintStream.println:(Ljava/lang/Object;)V
+        11: return
+      LineNumberTable:
+        line 19: 0
+        line 20: 4
+        line 21: 11
+      LocalVariableTable:
+        Start  Length  Slot  Name   Signature
+            0      12     0  this   Lcom/taldh/unkown/Constructor$Test;
+}            
+```
+
+这里发现一个规律：构造函数第一个都是aload_0。然后invokespecial 父类
+
+查阅资料可以知道：https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5.aload_n
+
+总结起来就是：在非静态方法中， aload_0 表示对this的操作，在static 方法中，aload_0表示对方法的第一参数的操作。
+
+所以构造函数第一步都是从寄存器中load出this，然后对this进行赋值（invokespecial 父类的init方法。）。
+
+因此我们看看AbstractApplicationContext无参构造函数字节码：
+
+```java
+ 0 aload_0
+ 1 invokespecial #2 <org/springframework/core/io/DefaultResourceLoader.<init>>
+ 4 aload_0
+ 5 aload_0
+ 6 invokevirtual #3 <java/lang/Object.getClass>
+ 9 invokestatic #4 <org/apache/commons/logging/LogFactory.getLog>
+12 putfield #5 <org/springframework/context/support/AbstractApplicationContext.logger>
+15 aload_0
+16 aload_0
+17 invokestatic #6 <org/springframework/util/ObjectUtils.identityToString>
+20 putfield #7 <org/springframework/context/support/AbstractApplicationContext.id>
+23 aload_0
+24 aload_0
+25 invokestatic #6 <org/springframework/util/ObjectUtils.identityToString>
+28 putfield #8 <org/springframework/context/support/AbstractApplicationContext.displayName>
+31 aload_0
+32 new #9 <java/util/ArrayList>
+35 dup
+36 invokespecial #10 <java/util/ArrayList.<init>>
+39 putfield #11 <org/springframework/context/support/AbstractApplicationContext.beanFactoryPostProcessors>
+42 aload_0
+43 new #12 <java/util/concurrent/atomic/AtomicBoolean>
+46 dup
+47 invokespecial #13 <java/util/concurrent/atomic/AtomicBoolean.<init>>
+50 putfield #14 <org/springframework/context/support/AbstractApplicationContext.active>
+53 aload_0
+54 new #12 <java/util/concurrent/atomic/AtomicBoolean>
+57 dup
+58 invokespecial #13 <java/util/concurrent/atomic/AtomicBoolean.<init>>
+61 putfield #15 <org/springframework/context/support/AbstractApplicationContext.closed>
+64 aload_0
+65 new #16 <java/lang/Object>
+68 dup
+69 invokespecial #17 <java/lang/Object.<init>>
+72 putfield #1 <org/springframework/context/support/AbstractApplicationContext.startupShutdownMonitor>
+75 aload_0
+76 new #18 <java/util/LinkedHashSet>
+79 dup
+80 invokespecial #19 <java/util/LinkedHashSet.<init>>
+83 putfield #20 <org/springframework/context/support/AbstractApplicationContext.applicationListeners>
+86 aload_0
+87 aload_0
+88 invokevirtual #21 <org/springframework/context/support/AbstractApplicationContext.getResourcePatternResolver>
+91 putfield #22 <org/springframework/context/support/AbstractApplicationContext.resourcePatternResolver>
+94 return
+
+```
+
+可以看到非常复杂，不过第一步还是对this进行了父类初始化的给值。这样new PathMatchingResourcePatternResolver(this);就能拿到有效的DefaultResourceLoader的值了。
+
+继续看！
+
+回顾一下之前的new PathMatchingResourcePatternResolver(this);
+
+```java
+AbstractApplicationContext文件##########################
+适配器模式，ResourcePatternResolver -> AbstractApplicationContext。
+public AbstractApplicationContext() {
+    this.resourcePatternResolver = getResourcePatternResolver();
+}    
+protected ResourcePatternResolver getResourcePatternResolver() {
+    return new PathMatchingResourcePatternResolver(this);
+}
+```
+
+![image-20200610114337331](Spring.assets/image-20200610114337331.png)
+
+```java
+//构造函数
+
+	/**
+	 * Create a new PathMatchingResourcePatternResolver with a DefaultResourceLoader.
+	 * <p>ClassLoader access will happen via the thread context class loader.
+	 * @see org.springframework.core.io.DefaultResourceLoader
+	 */
+	public PathMatchingResourcePatternResolver() {
+		this.resourceLoader = new DefaultResourceLoader();
+	}
+
+	public PathMatchingResourcePatternResolver(ResourceLoader resourceLoader) {
+		Assert.notNull(resourceLoader, "ResourceLoader must not be null");
+		this.resourceLoader = resourceLoader;
+	}
+```
+
+这里调用的是第二个，不过和第一个在这个案例也没什么区别。这样AbstractApplicationContext就能拿到这个资源解析器。
+
+这里开启新的篇章ApplicationContext的第一个重要部分：DefaultResourceLoader
+
+```java
+
+/**
+ * Default implementation of the {@link ResourceLoader} interface.
+ * Used by {@link ResourceEditor}, and serves as base class for
+ * {@link org.springframework.context.support.AbstractApplicationContext}.
+ * Can also be used standalone.
+ *
+ * <p>Will return a {@link UrlResource} if the location value is a URL,
+ * and a {@link ClassPathResource} if it is a non-URL path or a
+ * "classpath:" pseudo-URL.
+ *
+ * @author Juergen Hoeller
+ * @since 10.03.2004
+ * @see FileSystemResourceLoader
+ * @see org.springframework.context.support.ClassPathXmlApplicationContext
+ */
+public class DefaultResourceLoader implements ResourceLoader {
+    
+```
+
+根据上面可知，这个DefaultResourceLoader类在PropertyEditor有用到，我们先试试这个类。
+
+看看这个类的源码，没多少就全贴上吧
+
+```java
+
+/**
+ * {@link java.beans.PropertyEditor Editor} for {@link Resource}
+ * descriptors, to automatically convert {@code String} locations
+ * e.g. {@code file:C:/myfile.txt} or {@code classpath:myfile.txt} to
+ * {@code Resource} properties instead of using a {@code String} location property.
+ *
+ * <p>The path may contain {@code ${...}} placeholders, to be
+ * resolved as {@link org.springframework.core.env.Environment} properties:
+ * e.g. {@code ${user.dir}}. Unresolvable placeholders are ignored by default.
+ *
+ * <p>Delegates to a {@link ResourceLoader} to do the heavy lifting,
+ * by default using a {@link DefaultResourceLoader}.
+ *
+ * @author Juergen Hoeller
+ * @author Dave Syer
+ * @author Chris Beams
+ * @since 28.12.2003
+ * @see Resource
+ * @see ResourceLoader
+ * @see DefaultResourceLoader
+ * @see PropertyResolver#resolvePlaceholders
+ */
+public class ResourceEditor extends PropertyEditorSupport {
+
+	private final ResourceLoader resourceLoader;
+
+	@Nullable
+	private PropertyResolver propertyResolver;
+
+	private final boolean ignoreUnresolvablePlaceholders;
+
+
+	/**
+	 * Create a new instance of the {@link ResourceEditor} class
+	 * using a {@link DefaultResourceLoader} and {@link StandardEnvironment}.
+	 */
+	public ResourceEditor() {
+		this(new DefaultResourceLoader(), null);
+	}
+
+	/**
+	 * Create a new instance of the {@link ResourceEditor} class
+	 * using the given {@link ResourceLoader} and {@link PropertyResolver}.
+	 * @param resourceLoader the {@code ResourceLoader} to use
+	 * @param propertyResolver the {@code PropertyResolver} to use
+	 */
+	public ResourceEditor(ResourceLoader resourceLoader, @Nullable PropertyResolver propertyResolver) {
+		this(resourceLoader, propertyResolver, true);
+	}
+
+	/**
+	 * Create a new instance of the {@link ResourceEditor} class
+	 * using the given {@link ResourceLoader}.
+	 * @param resourceLoader the {@code ResourceLoader} to use
+	 * @param propertyResolver the {@code PropertyResolver} to use
+	 * @param ignoreUnresolvablePlaceholders whether to ignore unresolvable placeholders
+	 * if no corresponding property could be found in the given {@code propertyResolver}
+	 */
+	public ResourceEditor(ResourceLoader resourceLoader, @Nullable PropertyResolver propertyResolver,
+			boolean ignoreUnresolvablePlaceholders) {
+
+		Assert.notNull(resourceLoader, "ResourceLoader must not be null");
+		this.resourceLoader = resourceLoader;
+		this.propertyResolver = propertyResolver;
+		this.ignoreUnresolvablePlaceholders = ignoreUnresolvablePlaceholders;
+	}
+
+
+	@Override
+	public void setAsText(String text) {
+		if (StringUtils.hasText(text)) {
+			String locationToUse = resolvePath(text).trim();
+			setValue(this.resourceLoader.getResource(locationToUse));
+		}
+		else {
+			setValue(null);
+		}
+	}
+
+	/**
+	 * Resolve the given path, replacing placeholders with corresponding
+	 * property values from the {@code environment} if necessary.
+	 * @param path the original file path
+	 * @return the resolved file path
+	 * @see PropertyResolver#resolvePlaceholders
+	 * @see PropertyResolver#resolveRequiredPlaceholders
+	 */
+	protected String resolvePath(String path) {
+		if (this.propertyResolver == null) {
+			this.propertyResolver = new StandardEnvironment();
+		}
+		return (this.ignoreUnresolvablePlaceholders ? this.propertyResolver.resolvePlaceholders(path) :
+				this.propertyResolver.resolveRequiredPlaceholders(path));
+	}
+
+
+	@Override
+	@Nullable
+	public String getAsText() {
+		Resource value = (Resource) getValue();
+		try {
+			// Try to determine URL for resource.
+			return (value != null ? value.getURL().toExternalForm() : "");
+		}
+		catch (IOException ex) {
+			// Couldn't determine resource URL - return null to indicate
+			// that there is no appropriate text representation.
+			return null;
+		}
+	}
+
+}
+```
+
+看上面的描述，只要我们给他一个地址，类似{@code file:C:/myfile.txt} 或者 {@code classpath:myfile.txt}这样格式的代码，它就会自动给我们解析成对应的Resource。使用的ResourceLoader是我们关注的DefaultResourceLoader。
+
+```java
+// spring测试的源码
+class ResourceEditorTests {
+
+	@Test
+	void sunnyDay() {
+		PropertyEditor editor = new ResourceEditor();
+		editor.setAsText("classpath:org/springframework/core/io/ResourceEditorTests.class");
+		Resource resource = (Resource) editor.getValue();
+		assertThat(resource).isNotNull();
+		assertThat(resource.exists()).isTrue();
+	}
+```
+
+跟踪这个代码。进入setAsText方法
+
+```java
+@Override
+public void setAsText(String text) {
+    if (StringUtils.hasText(text)) {  // 判断输入是不是空串
+        String locationToUse = resolvePath(text).trim();  // 看下面的调用可知：propertyResolver是StandardEnvironment类型解析。这里只用它解决了占位符的问题
+        setValue(this.resourceLoader.getResource(locationToUse));
+    }
+    else {
+        setValue(null);
+    }
+}
+
+
+/**
+	 * Resolve the given path, replacing placeholders with corresponding
+	 * property values from the {@code environment} if necessary.
+	 * @param path the original file path
+	 * @return the resolved file path
+	 * @see PropertyResolver#resolvePlaceholders
+	 * @see PropertyResolver#resolveRequiredPlaceholders
+	 */
+protected String resolvePath(String path) {
+    if (this.propertyResolver == null) {
+        this.propertyResolver = new StandardEnvironment();
+    }
+    return (this.ignoreUnresolvablePlaceholders ? this.propertyResolver.resolvePlaceholders(path) :
+            this.propertyResolver.resolveRequiredPlaceholders(path));
+}
+
+//setValue来自父类的java.beans.PropertyEditorSupport
+private Object value;
+/**
+     * Set (or change) the object that is to be edited.
+     *
+     * @param value The new target object to be edited.  Note that this
+     *     object should not be modified by the PropertyEditor, rather
+     *     the PropertyEditor should create a new object to hold any
+     *     modified value.
+     */
+public void setValue(Object value) {
+    this.value = value;
+    firePropertyChange();
+}
+
+// 最重点的部分：this.resourceLoader.getResource(locationToUse)
+// 这个是调用了org.springframework.core.io.DefaultResourceLoader#getResource 
+// DefaultResourceLoader 就是我们最关注的类了。
+@Override
+public Resource getResource(String location) {
+    Assert.notNull(location, "Location must not be null");
+
+    for (ProtocolResolver protocolResolver : getProtocolResolvers()) {
+        Resource resource = protocolResolver.resolve(location, this);
+        if (resource != null) {
+            return resource;
+        }
+    }
+
+    if (location.startsWith("/")) {
+        return getResourceByPath(location);
+    }
+    else if (location.startsWith(CLASSPATH_URL_PREFIX)) { // CLASSPATH_URL_PREFIX = "classpath:";
+        return new ClassPathResource(location.substring(CLASSPATH_URL_PREFIX.length()), getClassLoader());
+    }
+    else {
+        try {
+            // Try to parse the location as a URL...
+            URL url = new URL(location);
+            return (ResourceUtils.isFileURL(url) ? new FileUrlResource(url) : new UrlResource(url));
+        }
+        catch (MalformedURLException ex) {
+            // No URL -> resolve as resource path.
+            return getResourceByPath(location);
+        }
+    }
+}
+
+```
+
+这里可以看出最后只是返回了一个ClassPathResource实现给前端。其实这里使用的是策略模式：
+
+策略：1. 网络策略，2. “/”开头策略，3. “classpath:”开头策略 4. 输入的字符串能指定到对应的文件。所以`DefaultResourceLoader` 最精华的部分就是getResource了。
+
+看到这里就完了吗？不会！回头再看看这个测试用例：
+
+```java
+@Test
+void sunnyDay() {
+    PropertyEditor editor = new ResourceEditor();
+    editor.setAsText("classpath:org/springframework/core/io/ResourceEditorTests.class");
+    Resource resource = (Resource) editor.getValue(); //获取value，能根据名字猜到实现，就不说了。
+    assertThat(resource).isNotNull(); // 资源是空判断。
+    assertThat(resource.exists()).isTrue();  // 直接看到这里。
+}
+```
+
+`resource.exists()` 这个方法的执行如下：
+
+```java
+ClassPathResource文件
+
+@Override
+public boolean exists() {
+    return (resolveURL() != null);
+}
+
+/**
+	 * Resolves a URL for the underlying class path resource.
+	 * @return the resolved URL, or {@code null} if not resolvable
+	 */
+@Nullable
+protected URL resolveURL() {
+    if (this.clazz != null) { //这个为null，我们 使用的构造函数没对clazz赋值。
+        return this.clazz.getResource(this.path);
+    }
+    else if (this.classLoader != null) {
+        return this.classLoader.getResource(this.path); //最根本的查找资源的方法。
+    }
+    else {
+        return ClassLoader.getSystemResource(this.path);
+    }
+}
+```
+
+终于找到源头了：
+
+```java
+
+    /**
+     * Finds the resource with the given name.  A resource is some data
+     * (images, audio, text, etc) that can be accessed by class code in a way
+     * that is independent of the location of the code.
+     *
+     * <p> The name of a resource is a '<tt>/</tt>'-separated path name that
+     * identifies the resource.
+     *
+     * <p> This method will first search the parent class loader for the
+     * resource; if the parent is <tt>null</tt> the path of the class loader
+     * built-in to the virtual machine is searched.  That failing, this method
+     * will invoke {@link #findResource(String)} to find the resource.  </p>
+     *
+     * @apiNote When overriding this method it is recommended that an
+     * implementation ensures that any delegation is consistent with the {@link
+     * #getResources(java.lang.String) getResources(String)} method.
+     *
+     * @param  name
+     *         The resource name
+     *
+     * @return  A <tt>URL</tt> object for reading the resource, or
+     *          <tt>null</tt> if the resource could not be found or the invoker
+     *          doesn't have adequate  privileges to get the resource.
+     *
+     * @since  1.1
+     */
+    public URL getResource(String name) {
+        URL url;
+        if (parent != null) {
+            url = parent.getResource(name); // 双亲委托机制模式。
+        } else {
+            url = getBootstrapResource(name); //到达系统启动类加载器
+        }
+        if (url == null) {
+            url = findResource(name); //系统启动类加载器没有加载到，递归回退到第一次调用然后是扩展类加载器//最后如果都没有加载到，双亲委派加载失败，则加载应用本身自己的加载器。
+        }
+        return url;
+    }
+```
+
+class.getResources 和classLoader.getResources两者使用及区别可以看这里：https://cloud.tencent.com/developer/article/1425180。原理还不大懂。
+
+先记下这个能找资源，其它的后面再查找原理。
+
+
+
+
+
+
+
+### 回头看PathMatchingResourcePatternResolver
+
+PathMatchingResourcePatternResolver是ResourceLoader继承体系的一部分。这部分在上面分析过了。其中最主要的方法如下：
+
+```java
+@Override
+public Resource[] getResources(String locationPattern) throws IOException {
+    Assert.notNull(locationPattern, "Location pattern must not be null");
+    //classpath:
+    if (locationPattern.startsWith(CLASSPATH_ALL_URL_PREFIX)) {
+        // a class path resource (multiple resources for same name possible)
+        //matcher是一个AntPathMatcher对象
+        if (getPathMatcher().isPattern(locationPattern
+            .substring(CLASSPATH_ALL_URL_PREFIX.length()))) {
+            // a class path resource pattern
+            return findPathMatchingResources(locationPattern);
+        } else {
+            // all class path resources with the given name
+            return findAllClassPathResources(locationPattern
+                .substring(CLASSPATH_ALL_URL_PREFIX.length()));
+        }
+    } else {
+        // Only look for a pattern after a prefix here
+        // (to not get fooled by a pattern symbol in a strange prefix).
+        int prefixEnd = locationPattern.indexOf(":") + 1;
+        if (getPathMatcher().isPattern(locationPattern.substring(prefixEnd))) {
+            // a file pattern
+            return findPathMatchingResources(locationPattern);
+        }
+        else {
+            // a single resource with the given name
+            return new Resource[] {getResourceLoader().getResource(locationPattern)};
+        }
+    }
+}
+
+// 比如locationPattern=classpath*:org/springframework/context/annotation6/**/*.class
+protected Resource[] findPathMatchingResources(String locationPattern) throws IOException {
+    //rootDirPath=classpath*:org/springframework/context/annotation6/
+    String rootDirPath = determineRootDir(locationPattern);
+    //subPattern = **/*.class
+    String subPattern = locationPattern.substring(rootDirPath.length());
+    Resource[] rootDirResources = getResources(rootDirPath);  // 这里调用自身，然后通过classpath*:org/springframework/context/annotation6/ 回去找这个目录下所有的文件夹资源。通过findAllClassPathResources方法。
+    Set<Resource> result = new LinkedHashSet<>(16);
+    for (Resource rootDirResource : rootDirResources) {
+        rootDirResource = resolveRootDirResource(rootDirResource); //
+        URL rootDirUrl = rootDirResource.getURL();
+        if (equinoxResolveMethod != null && rootDirUrl.getProtocol().startsWith("bundle")) {
+            URL resolvedUrl = (URL) ReflectionUtils.invokeMethod(equinoxResolveMethod, null, rootDirUrl);
+            if (resolvedUrl != null) {
+                rootDirUrl = resolvedUrl;
+            }
+            rootDirResource = new UrlResource(rootDirUrl);
+        }
+        if (rootDirUrl.getProtocol().startsWith(ResourceUtils.URL_PROTOCOL_VFS)) {
+            result.addAll(VfsResourceMatchingDelegate.findMatchingResources(rootDirUrl, subPattern, getPathMatcher()));
+        }
+        else if (ResourceUtils.isJarURL(rootDirUrl) || isJarResource(rootDirResource)) {
+            result.addAll(doFindPathMatchingJarResources(rootDirResource, rootDirUrl, subPattern));
+        }
+        else {
+            result.addAll(doFindPathMatchingFileResources(rootDirResource, subPattern)); // 一般情况的寻找文件夹下所有文件会进入这里，这里面的逻辑很深，就不举行扩张了。
+        }
+    }
+    if (logger.isTraceEnabled()) {
+        logger.trace("Resolved location pattern [" + locationPattern + "] to resources " + result);
+    }
+    // 这里的返回值可以给大家看看，如下：
+    return result.toArray(new Resource[0]);
+}
+
+
+protected Resource[] findAllClassPathResources(String location) throws IOException {
+    String path = location;
+    if (path.startsWith("/")) {
+        path = path.substring(1);
+    }
+    Set<Resource> result = doFindAllClassPathResources(path);
+    if (logger.isTraceEnabled()) {
+        logger.trace("Resolved classpath location [" + location + "] to resources " + result);
+    }
+    return result.toArray(new Resource[0]);
+}
+
+protected Set<Resource> doFindAllClassPathResources(String path) throws IOException {
+    Set<Resource> result = new LinkedHashSet<>(16);
+    ClassLoader cl = getClassLoader();
+    Enumeration<URL> resourceUrls = (cl != null ? cl.getResources(path) : ClassLoader.getSystemResources(path));
+    while (resourceUrls.hasMoreElements()) {
+        URL url = resourceUrls.nextElement();
+        result.add(convertClassLoaderURL(url));
+    }
+    if ("".equals(path)) {
+        // The above result is likely to be incomplete, i.e. only containing file system references.
+        // We need to have pointers to each of the jar files on the classpath as well...
+        addAllClassLoaderJarRoots(cl, result);
+    }
+    return result;
+}
+```
+
+findPathMatchingResources的返回值：
+
+![image-20200617104804824](Spring.assets/image-20200617104804824.png)
+
+
+
+从上面可以看出其实最主要的就是通过ClassLoader.getResources找资源。
+
+isPattern:
+
+```java
+@Override
+public boolean isPattern(String path) {
+    return (path.indexOf('*') != -1 || path.indexOf('?') != -1);
+}
+```
+
+
+
+```java
+class PathMatchingResourcePatternResolverTests {
+
+	private static final String[] CLASSES_IN_CORE_IO_SUPPORT =
+			new String[] {"EncodedResource.class", "LocalizedResourceHelper.class",
+					"PathMatchingResourcePatternResolver.class", "PropertiesLoaderSupport.class",
+					"PropertiesLoaderUtils.class", "ResourceArrayPropertyEditor.class",
+					"ResourcePatternResolver.class", "ResourcePatternUtils.class"};
+
+	private static final String[] TEST_CLASSES_IN_CORE_IO_SUPPORT =
+			new String[] {"PathMatchingResourcePatternResolverTests.class"};
+
+	private static final String[] CLASSES_IN_REACTOR_UTIL_ANNOTATIONS =
+			new String[] {"NonNull.class", "NonNullApi.class", "Nullable.class"};
+
+	private PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
+
+
+	@Test
+	void invalidPrefixWithPatternElementInIt() throws IOException {
+		assertThatExceptionOfType(FileNotFoundException.class).isThrownBy(() ->
+				resolver.getResources("xx**:**/*.xy"));
+	}
+
+	@Test
+	void singleResourceOnFileSystem() throws IOException {
+		Resource[] resources =
+				resolver.getResources("org/springframework/core/io/support/PathMatchingResourcePatternResolverTests.class");
+		assertThat(resources.length).isEqualTo(1);
+		assertProtocolAndFilenames(resources, "file", "PathMatchingResourcePatternResolverTests.class");
+	}
+
+	@Test
+	void singleResourceInJar() throws IOException {
+		Resource[] resources = resolver.getResources("org/reactivestreams/Publisher.class");
+		assertThat(resources.length).isEqualTo(1);
+		assertProtocolAndFilenames(resources, "jar", "Publisher.class");
+	}
+
+	@Disabled
+	@Test
+	void classpathStarWithPatternOnFileSystem() throws IOException {
+		Resource[] resources = resolver.getResources("classpath*:org/springframework/core/io/sup*/*.class");
+		// Have to exclude Clover-generated class files here,
+		// as we might be running as part of a Clover test run.
+		List<Resource> noCloverResources = new ArrayList<>();
+		for (Resource resource : resources) {
+			if (!resource.getFilename().contains("$__CLOVER_")) {
+				noCloverResources.add(resource);
+			}
+		}
+		resources = noCloverResources.toArray(new Resource[0]);
+		assertProtocolAndFilenames(resources, "file",
+				StringUtils.concatenateStringArrays(CLASSES_IN_CORE_IO_SUPPORT, TEST_CLASSES_IN_CORE_IO_SUPPORT));
+	}
+
+	@Test
+	void getResourcesOnFileSystemContainingHashtagsInTheirFileNames() throws IOException {
+		Resource[] resources = resolver.getResources("classpath*:org/springframework/core/io/**/resource#test*.txt");
+		assertThat(resources).extracting(Resource::getFile).extracting(File::getName)
+			.containsExactlyInAnyOrder("resource#test1.txt", "resource#test2.txt");
+	}
+
+	@Test
+	void classpathWithPatternInJar() throws IOException {
+		Resource[] resources = resolver.getResources("classpath:reactor/util/annotation/*.class");
+		assertProtocolAndFilenames(resources, "jar", CLASSES_IN_REACTOR_UTIL_ANNOTATIONS);
+	}
+
+	@Test
+	void classpathStarWithPatternInJar() throws IOException {
+		Resource[] resources = resolver.getResources("classpath*:reactor/util/annotation/*.class");
+		assertProtocolAndFilenames(resources, "jar", CLASSES_IN_REACTOR_UTIL_ANNOTATIONS);
+	}
+
+	@Test
+	void rootPatternRetrievalInJarFiles() throws IOException {
+		Resource[] resources = resolver.getResources("classpath*:*.dtd");
+		boolean found = false;
+		for (Resource resource : resources) {
+			if (resource.getFilename().equals("aspectj_1_5_0.dtd")) {
+				found = true;
+				break;
+			}
+		}
+		assertThat(found).as("Could not find aspectj_1_5_0.dtd in the root of the aspectjweaver jar").isTrue();
+	}
+
+
+	private void assertProtocolAndFilenames(Resource[] resources, String protocol, String... filenames)
+			throws IOException {
+
+		// Uncomment the following if you encounter problems with matching against the file system
+		// It shows file locations.
+//		String[] actualNames = new String[resources.length];
+//		for (int i = 0; i < resources.length; i++) {
+//			actualNames[i] = resources[i].getFilename();
+//		}
+//		List sortedActualNames = new LinkedList(Arrays.asList(actualNames));
+//		List expectedNames = new LinkedList(Arrays.asList(fileNames));
+//		Collections.sort(sortedActualNames);
+//		Collections.sort(expectedNames);
+//
+//		System.out.println("-----------");
+//		System.out.println("Expected: " + StringUtils.collectionToCommaDelimitedString(expectedNames));
+//		System.out.println("Actual: " + StringUtils.collectionToCommaDelimitedString(sortedActualNames));
+//		for (int i = 0; i < resources.length; i++) {
+//			System.out.println(resources[i]);
+//		}
+
+		assertThat(resources.length).as("Correct number of files found").isEqualTo(filenames.length);
+		for (Resource resource : resources) {
+			String actualProtocol = resource.getURL().getProtocol();
+			assertThat(actualProtocol).isEqualTo(protocol);
+			assertFilenameIn(resource, filenames);
+		}
+	}
+
+	private void assertFilenameIn(Resource resource, String... filenames) {
+		String filename = resource.getFilename();
+		assertThat(Arrays.stream(filenames).anyMatch(filename::endsWith)).as(resource + " does not have a filename that matches any of the specified names").isTrue();
+	}
+
+}
+```
+
+
+
+
+
+
+
+
 
 ### 设置配置文件路径
 
@@ -199,6 +1019,11 @@ public void setConfigLocations(String... locations) {
 resolvePath:
 
 ```java
+environment 是 ApplicationContext的一个重要属性。
+/** Environment used by this context. */
+@Nullable
+private ConfigurableEnvironment environment;
+
 protected String resolvePath(String path) {
     return getEnvironment().resolveRequiredPlaceholders(path);
 }
@@ -216,11 +1041,17 @@ protected ConfigurableEnvironment createEnvironment() {
 
 #### Environment接口
 
+环境主要分类为两大部分：profile，properties
+
 继承体系:
 
 ![Environment继承体系](images/Environment.jpg)
 
-Environmen接口**代表了当前应用所处的环境。**从此接口的方法可以看出，其主要和profile、Property相关。
+
+
+![资源](Spring.assets/StandardEnvironment.png)
+
+Environmen接口**代表了当前应用所处的环境。**从此接口的方法可以看出，其主要和**profile**、**Property**相关。
 
 ##### Profile
 
@@ -250,6 +1081,191 @@ context.getEnvironment().setActiveProfiles("dev");
 
 [Spring Profiles example](http://www.mkyong.com/spring/spring-profiles-example/)
 
+
+
+Envirnment体系最重要的方法就是org.springframework.core.env.AbstractEnvironment#customizePropertySources
+
+子类负责继承这个方法之后进行定制自己的PropertySources
+
+这里看看StandardEnvironment，超级简单。
+
+```java
+public class StandardEnvironment extends AbstractEnvironment {
+
+	/** System environment property source name: {@value}. */
+	public static final String SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME = "systemEnvironment";
+
+	/** JVM system properties property source name: {@value}. */
+	public static final String SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME = "systemProperties";
+
+
+	/**
+	 * Customize the set of property sources with those appropriate for any standard
+	 * Java environment:
+	 * <ul>
+	 * <li>{@value #SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME}
+	 * <li>{@value #SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME}
+	 * </ul>
+	 * <p>Properties present in {@value #SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME} will
+	 * take precedence over those in {@value #SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME}.
+	 * @see AbstractEnvironment#customizePropertySources(MutablePropertySources)
+	 * @see #getSystemProperties()
+	 * @see #getSystemEnvironment()
+	 */
+	@Override
+	protected void customizePropertySources(MutablePropertySources propertySources) {
+		propertySources.addLast(
+				new PropertiesPropertySource(SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME, getSystemProperties()));
+		propertySources.addLast(
+				new SystemEnvironmentPropertySource(SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME, getSystemEnvironment()));
+	}
+
+}
+```
+
+其中getSystemProperties()和getSystemEnvironment()是父类AbstractEnvironment的。
+
+```java
+org.springframework.core.env.AbstractEnvironment#getSystemProperties
+    
+@Override
+@SuppressWarnings({"rawtypes", "unchecked"})
+public Map<String, Object> getSystemProperties() {
+    try {
+        return (Map) System.getProperties();
+    }
+    catch (AccessControlException ex) {
+        return (Map) new ReadOnlySystemAttributesMap() {
+            @Override
+            @Nullable
+            protected String getSystemAttribute(String attributeName) {
+                try {
+                    return System.getProperty(attributeName);
+                }
+                catch (AccessControlException ex) {
+                    if (logger.isInfoEnabled()) {
+                        logger.info("Caught AccessControlException when accessing system property '" +
+                                    attributeName + "'; its value will be returned [null]. Reason: " + ex.getMessage());
+                    }
+                    return null;
+                }
+            }
+        };
+    }
+} 
+
+@Override
+@SuppressWarnings({"rawtypes", "unchecked"})
+public Map<String, Object> getSystemEnvironment() {
+    if (suppressGetenvAccess()) {
+        return Collections.emptyMap();
+    }
+    try {
+        return (Map) System.getenv();
+    }
+    catch (AccessControlException ex) {
+        return (Map) new ReadOnlySystemAttributesMap() {
+            @Override
+            @Nullable
+            protected String getSystemAttribute(String attributeName) {
+                try {
+                    return System.getenv(attributeName);
+                }
+                catch (AccessControlException ex) {
+                    if (logger.isInfoEnabled()) {
+                        logger.info("Caught AccessControlException when accessing system environment variable '" +
+                                    attributeName + "'; its value will be returned [null]. Reason: " + ex.getMessage());
+                    }
+                    return null;
+                }
+            }
+        };
+    }
+}
+
+下面是具体jvm的实现
+public static Properties getProperties() {
+    SecurityManager sm = getSecurityManager();
+    if (sm != null) {
+        sm.checkPropertiesAccess();
+    }
+
+    return props;
+}
+```
+
+![image-20200609153437464](Spring.assets/image-20200609153437464.png)
+
+![image-20200609153503280](Spring.assets/image-20200609153503280.png)
+
+这是上面的类的说明。
+
+这里的实现很有意思，如果安全管理器阻止获取全部的系统属性，那么会尝试获取单个属性的可能性，如果还不行就抛异常了。
+
+getSystemEnvironment方法也是一个套路，不过最终调用的是System.getenv，可以获取jvm和OS的一些版本信息。
+
+
+
+```
+返回当前系统环境的不可修改的字符串映射视图。 环境是从名字依赖于系统的映射，这是从父母传给子进程的值。
+如果系统不支持环境变量，则返回一个空映射。
+返回的映射永远不会包含null键或值。 试图查询null键或值的存在将抛出一个NullPointerException 。 试图查询的键或值是类型的不存在String将抛出ClassCastException 。
+返回的映射及其集合视图不能遵守的一般合同Object.equals和Object.hashCode方法。
+返回的映射通常是区分大小写的所有平台。
+如果存在安全管理器，它checkPermission方法被调用了RuntimePermission ("getenv.*")权限。 这可能导致SecurityException被抛出。
+当将信息传递给一个Java子进程， 系统性能通常优于环境变量
+
+
+    /**
+     * Returns an unmodifiable string map view of the current system environment.
+     * The environment is a system-dependent mapping from names to
+     * values which is passed from parent to child processes.
+     *
+     * <p>If the system does not support environment variables, an
+     * empty map is returned.
+     *
+     * <p>The returned map will never contain null keys or values.
+     * Attempting to query the presence of a null key or value will
+     * throw a {@link NullPointerException}.  Attempting to query
+     * the presence of a key or value which is not of type
+     * {@link String} will throw a {@link ClassCastException}.
+     *
+     * <p>The returned map and its collection views may not obey the
+     * general contract of the {@link Object#equals} and
+     * {@link Object#hashCode} methods.
+     *
+     * <p>The returned map is typically case-sensitive on all platforms.
+     *
+     * <p>If a security manager exists, its
+     * {@link SecurityManager#checkPermission checkPermission}
+     * method is called with a
+     * <code>{@link RuntimePermission}("getenv.*")</code>
+     * permission.  This may result in a {@link SecurityException} being
+     * thrown.
+     *
+     * <p>When passing information to a Java subprocess,
+     * <a href=#EnvironmentVSSystemProperties>system properties</a>
+     * are generally preferred over environment variables.
+     *
+     * @return the environment as a map of variable names to values
+     * @throws SecurityException
+     *         if a security manager exists and its
+     *         {@link SecurityManager#checkPermission checkPermission}
+     *         method doesn't allow access to the process environment
+     * @see    #getenv(String)
+     * @see    ProcessBuilder#environment()
+     * @since  1.5
+     */
+    public static java.util.Map<String,String> getenv() {
+        SecurityManager sm = getSecurityManager();
+        if (sm != null) {
+            sm.checkPermission(new RuntimePermission("getenv.*"));
+        }
+
+        return ProcessEnvironment.getenv();
+    }
+```
+
 ##### Property
 
 这里的Property指的是程序运行时的一些参数，引用注释:
@@ -267,9 +1283,11 @@ public AbstractEnvironment() {
 
 #####  PropertySources接口
 
-继承体系:
+MutablePropertySources和PropertySource，组合模式。
 
-![PropertySources继承体系](images/PropertySources.jpg)
+
+
+![image-20200609182519391](Spring.assets/image-20200609182519391.png)
 
 此接口实际上是PropertySource的容器，默认的MutablePropertySources实现内部含有一个CopyOnWriteArrayList作为存储载体。
 
@@ -288,6 +1306,8 @@ protected void customizePropertySources(MutablePropertySources propertySources) 
         (SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME, getSystemEnvironment()));
 }
 ```
+
+
 
 ##### PropertySource接口
 
@@ -351,7 +1371,7 @@ private final ConfigurablePropertyResolver propertyResolver =
 
 PropertyResolver继承体系(排除Environment分支):
 
-![PropertyResolver继承体系](images/PropertyResolver.jpg)
+![image-20200609161242255](Spring.assets/image-20200609161242255.png)
 
 此接口正是用来解析PropertyResource。
 
@@ -419,13 +1439,194 @@ protected <T> T getProperty(String key, Class<T> targetValueType, boolean resolv
 
 很明显了，就是从System.getProperty和System.getenv获取，但是由于环境变量是无法自定义的，所以其实此处只能通过System.setProperty指定。
 
+占位符的真正实现在这里：
+
+```java
+	protected String parseStringValue(
+			String value, PlaceholderResolver placeholderResolver, @Nullable Set<String> visitedPlaceholders) {
+
+		int startIndex = value.indexOf(this.placeholderPrefix);
+		if (startIndex == -1) {
+			return value;
+		}
+
+		StringBuilder result = new StringBuilder(value);
+		while (startIndex != -1) {
+			int endIndex = findPlaceholderEndIndex(result, startIndex);
+			if (endIndex != -1) {
+				String placeholder = result.substring(startIndex + this.placeholderPrefix.length(), endIndex);
+				String originalPlaceholder = placeholder;
+				if (visitedPlaceholders == null) {
+					visitedPlaceholders = new HashSet<>(4);
+				}
+				if (!visitedPlaceholders.add(originalPlaceholder)) {
+					throw new IllegalArgumentException(
+							"Circular placeholder reference '" + originalPlaceholder + "' in property definitions");
+				}
+				// Recursive invocation, parsing placeholders contained in the placeholder key.
+				placeholder = parseStringValue(placeholder, placeholderResolver, visitedPlaceholders);
+				// Now obtain the value for the fully resolved key...
+				String propVal = placeholderResolver.resolvePlaceholder(placeholder);
+				if (propVal == null && this.valueSeparator != null) {
+					int separatorIndex = placeholder.indexOf(this.valueSeparator);
+					if (separatorIndex != -1) {
+						String actualPlaceholder = placeholder.substring(0, separatorIndex);
+						String defaultValue = placeholder.substring(separatorIndex + this.valueSeparator.length());
+						propVal = placeholderResolver.resolvePlaceholder(actualPlaceholder);
+						if (propVal == null) {
+							propVal = defaultValue;
+						}
+					}
+				}
+				if (propVal != null) {
+					// Recursive invocation, parsing placeholders contained in the
+					// previously resolved placeholder value.
+					propVal = parseStringValue(propVal, placeholderResolver, visitedPlaceholders);
+					result.replace(startIndex, endIndex + this.placeholderSuffix.length(), propVal);
+					if (logger.isTraceEnabled()) {
+						logger.trace("Resolved placeholder '" + placeholder + "'");
+					}
+					startIndex = result.indexOf(this.placeholderPrefix, startIndex + propVal.length());
+				}
+				else if (this.ignoreUnresolvablePlaceholders) {
+					// Proceed with unprocessed value.
+					startIndex = result.indexOf(this.placeholderPrefix, endIndex + this.placeholderSuffix.length());
+				}
+				else {
+					throw new IllegalArgumentException("Could not resolve placeholder '" +
+							placeholder + "'" + " in value \"" + value + "\"");
+				}
+				visitedPlaceholders.remove(originalPlaceholder);
+			}
+			else {
+				startIndex = -1;
+			}
+		}
+		return result.toString();
+	}
+```
+
+
+
 注意，classpath:XXX这种写法的classpath前缀到目前为止还没有被处理。
+
+占位符体系尝试
+
+```java
+PropertyPlaceholderHelper propertyPlaceholderHelper = new PropertyPlaceholderHelper("${", "}");
+MutablePropertySources propertySources = new MutablePropertySources();
+Properties properties = new Properties();
+properties.put("test", "ydonghao");
+System.out.println(propertyPlaceholderHelper.replacePlaceholders("${test}", properties));
+```
+
+output:
+
+```
+this is a placeholder : ydonghao
+```
+
+然后试试environment使用方法：
+
+```
+public class EsEnvironment extends AbstractEnvironment{
+
+	private static final String WDPH_ES_PROPERTIES = "wdphEsProperties";
+
+	@Override
+	protected void customizePropertySources(MutablePropertySources propertySources) {
+		Properties properties = new Properties();
+		properties.put("test", "ydonghao");
+		properties.put("test1", "ydonghao1");
+		properties.put("test2", "ydonghao2");
+		propertySources.addLast(
+				new PropertiesPropertySource(WDPH_ES_PROPERTIES, properties));
+
+	}
+
+	public static void main(String[] args) {
+		EsEnvironment esEnvironment = new EsEnvironment();
+		System.out.println(esEnvironment.resolvePlaceholders("This is a placeholder : ${test33:wewrwe}..."));
+		System.out.println(esEnvironment.resolveRequiredPlaceholders("This is a placeholder : ${test33:wewrwe}..."));
+		System.out.println(esEnvironment.resolveRequiredPlaceholders("This is a placeholder : ${test33}..."));   //这个会抛出异常。
+	}
+
+}
+```
+
+output
+
+```
+This is a placeholder : wewrwe...
+This is a placeholder : wewrwe...
+Exception in thread "main" java.lang.IllegalArgumentException: Could not resolve placeholder 'test33' in value "This is a placeholder : ${test33}..."
+	at org.springframework.util.PropertyPlaceholderHelper.parseStringValue(PropertyPlaceholderHelper.java:178)
+	at org.springframework.util.PropertyPlaceholderHelper.replacePlaceholders(PropertyPlaceholderHelper.java:124)
+	at org.springframework.core.env.AbstractPropertyResolver.doResolvePlaceholders(AbstractPropertyResolver.java:239)
+	at org.springframework.core.env.AbstractPropertyResolver.resolveRequiredPlaceholders(AbstractPropertyResolver.java:210)
+	at org.springframework.core.env.AbstractEnvironment.resolveRequiredPlaceholders(AbstractEnvironment.java:578)
+	at org.springframework.core.env.EsEnvironment.main(EsEnvironment.java:32)
+```
+
+![image-20200609183235916](Spring.assets/image-20200609183235916.png)
+
+![image-20200609183748963](Spring.assets/image-20200609183748963.png)
+
+结论：propertiesSources/propertiesSource是spring对jdk的property的一个封装。
 
 ## refresh
 
-Spring bean解析就在此方法，所以单独提出来。
+把关注里集中在AbstractApplicationContext一下：
+
+![image-20200609220730010](Spring.assets/image-20200609220730010.png)
+
+以上图回顾一下，我们已经讲了environment领域，接下来顺着ApplicationContext去讲其它领域。
+
+从上图可以看出：
+
+```java
+public abstract class AbstractApplicationContext extends DefaultResourceLoader
+		implements ConfigurableApplicationContext {
+    ....
+```
+
+`AbstractApplicationContext` 继承的是 DefaultResourceLoader，那么这里先打个基础：
+
+```java
+public interface A {
+    void testA();
+}
+
+public class B implements A {
+    public void testA() {
+        //..
+    }
+}
+
+public interface C extends A {
+    void testC();
+}
+
+public class D extends B implements C {
+    
+    // 这里实现testC即刻，不用实现testA
+    public void testC() {
+        //..
+    }
+}
+
+即D默认使用了B实现的testA();
+```
+
+按以上案例：AbstractApplicationContext使用了
+
+Spring bean解析就在此方法，所以单独提出来。（最重要的大餐。）
 
 AbstractApplicationContext.refresh:
+
+这个方法使用的模版模式。整个方法的执行由AbstractApplicationContext 及其子类完成。
+
+这个例子由AbstractApplicationContext，AbstractRefreshableApplicationContext ，AbstractXmlApplicationContext，ClassPathXmlApplicationContext共同完成。
 
 ```java
 @Override
@@ -479,15 +1680,35 @@ protected void prepareRefresh() {
     this.startupDate = System.currentTimeMillis();
     this.closed.set(false);
     this.active.set(true);
+    
+    if (logger.isDebugEnabled()) {
+        if (logger.isTraceEnabled()) {
+            logger.trace("Refreshing " + this);
+        }
+        else {
+            logger.debug("Refreshing " + getDisplayName());
+        }
+    }
+    
     // Initialize any placeholder property sources in the context environment
     //空实现
     initPropertySources();
     // Validate that all properties marked as required are resolvable
     // see ConfigurablePropertyResolver#setRequiredProperties
     getEnvironment().validateRequiredProperties();
+    
+    // Store pre-refresh ApplicationListeners...
+    if (this.earlyApplicationListeners == null) {
+        this.earlyApplicationListeners = new LinkedHashSet<>(this.applicationListeners);
+    } else {
+        // Reset local application listeners to pre-refresh state.
+        this.applicationListeners.clear();
+        this.applicationListeners.addAll(this.earlyApplicationListeners);
+    }
+
     // Allow for the collection of early ApplicationEvents,
     // to be published once the multicaster is available...
-    this.earlyApplicationEvents = new LinkedHashSet<ApplicationEvent>();
+    this.earlyApplicationEvents = new LinkedHashSet<>();
 }
 ```
 
@@ -526,6 +1747,36 @@ requiredProperties是通过setRequiredProperties方法设置的，保存在一�
 由obtainFreshBeanFactory调用AbstractRefreshableApplicationContext.refreshBeanFactory:
 
 ```java
+AbstractApplicationContext文件##########################
+	/**
+	 * Tell the subclass to refresh the internal bean factory.
+	 * @return the fresh BeanFactory instance
+	 * @see #refreshBeanFactory()
+	 * @see #getBeanFactory()
+	 */
+protected ConfigurableListableBeanFactory obtainFreshBeanFactory() {
+    refreshBeanFactory();
+    return getBeanFactory();
+}
+
+	/**
+	 * Subclasses must implement this method to perform the actual configuration load.
+	 * The method is invoked by {@link #refresh()} before any other initialization work.
+	 * <p>A subclass will either create a new bean factory and hold a reference to it,
+	 * or return a single BeanFactory instance that it holds. In the latter case, it will
+	 * usually throw an IllegalStateException if refreshing the context more than once.
+	 * @throws BeansException if initialization of the bean factory failed
+	 * @throws IllegalStateException if already initialized and multiple refresh
+	 * attempts are not supported
+	 */
+protected abstract void refreshBeanFactory() throws BeansException, IllegalStateException;
+
+AbstractRefreshableApplicationContext文件#######################
+/*
+	 * This implementation performs an actual refresh of this context's underlying
+	 * bean factory, shutting down the previous bean factory (if any) and
+	 * initializing a fresh bean factory for the next phase of the context's lifecycle.
+	 */
 @Override
 protected final void refreshBeanFactory() throws BeansException {
     //如果已经存在，那么销毁之前的
@@ -533,22 +1784,207 @@ protected final void refreshBeanFactory() throws BeansException {
         destroyBeans();
         closeBeanFactory();
     }
-    //创建了一个DefaultListableBeanFactory对象
-    DefaultListableBeanFactory beanFactory = createBeanFactory();
-    beanFactory.setSerializationId(getId());
-    customizeBeanFactory(beanFactory);
-    loadBeanDefinitions(beanFactory);
-    synchronized (this.beanFactoryMonitor) {
+    try {
+        //创建了一个DefaultListableBeanFactory对象
+        DefaultListableBeanFactory beanFactory = createBeanFactory();
+        beanFactory.setSerializationId(getId());
+        customizeBeanFactory(beanFactory);
+        loadBeanDefinitions(beanFactory);
         this.beanFactory = beanFactory;
+    } catch (IOException ex) {
+        throw new ApplicationContextException("I/O error parsing bean definition source for " + getDisplayName(), ex);
     }
 }
+
+protected final boolean hasBeanFactory() {
+    return (this.beanFactory != null);
+}
+
+这个是AbstractApplicationContext文件##########################
+	/**
+	 * Template method for destroying all beans that this context manages.
+	 * The default implementation destroy all cached singletons in this context,
+	 * invoking {@code DisposableBean.destroy()} and/or the specified
+	 * "destroy-method".
+	 * <p>Can be overridden to add context-specific bean destruction steps
+	 * right before or right after standard singleton destruction,
+	 * while the context's BeanFactory is still active.
+	 * @see #getBeanFactory()
+	 * @see org.springframework.beans.factory.config.ConfigurableBeanFactory#destroySingletons()
+	 */
+	protected void destroyBeans() {
+		getBeanFactory().destroySingletons();
+	}
+
+这个是AbstractRefreshableApplicationContext文件####################################
+@Override
+	protected final void closeBeanFactory() {
+		DefaultListableBeanFactory beanFactory = this.beanFactory;
+		if (beanFactory != null) {
+			beanFactory.setSerializationId(null);
+			this.beanFactory = null;
+		}
+	}
+
+
 ```
+
+`createBeanFactory(); ` 就要带大家去了解一下什么是BeanFactory家族了。
 
 #### BeanFactory接口
 
 此接口实际上就是Bean容器，其继承体系:
 
 ![BeanFactory继承体系](images/BeanFactory.jpg)
+
+![image-20200609230548565](Spring.assets/image-20200609230548565.png)
+
+
+
+#### BeanFactory创建
+
+```java
+这是文件AbstractRefreshableApplicationContext的方法####################
+/**
+* Create an internal bean factory for this context.
+* Called for each {@link #refresh()} attempt.
+* <p>The default implementation creates a
+* {@link org.springframework.beans.factory.support.DefaultListableBeanFactory}
+* with the {@linkplain #getInternalParentBeanFactory() internal bean factory} of this
+* context's parent as parent bean factory. Can be overridden in subclasses,
+* for example to customize DefaultListableBeanFactory's settings.
+* @return the bean factory for this context
+* @see org.springframework.beans.factory.support.DefaultListableBeanFactory#setAllowBeanDefinitionOverriding
+* @see org.springframework.beans.factory.support.DefaultListableBeanFactory#setAllowEagerClassLoading
+* @see org.springframework.beans.factory.support.DefaultListableBeanFactory#setAllowCircularReferences
+* @see org.springframework.beans.factory.support.DefaultListableBeanFactory#setAllowRawInjectionDespiteWrapping
+*/
+protected DefaultListableBeanFactory createBeanFactory() {
+	return new DefaultListableBeanFactory(getInternalParentBeanFactory());
+}
+org.springframework.context.support.AbstractApplicationContext#getInternalParentBeanFactory
+    
+这是文件AbstractApplicationContext的方法#############################
+    /**
+     * 返回如果它实现ConfigurableApplicationContext父上下文的内部bean工厂; 否则，返回自己的父上下文。
+	 * Return the internal bean factory of the parent context if it implements
+	 * ConfigurableApplicationContext; else, return the parent context itself.
+	 * @see org.springframework.context.ConfigurableApplicationContext#getBeanFactory
+	 */
+    @Nullable
+    protected BeanFactory getInternalParentBeanFactory() {
+    return (getParent() instanceof ConfigurableApplicationContext ?
+            ((ConfigurableApplicationContext) getParent()).getBeanFactory() : getParent());
+	}
+
+这是文件DefaultListableBeanFactory的方法方法#####################
+	/**
+	 * Create a new DefaultListableBeanFactory with the given parent.
+	 * @param parentBeanFactory the parent BeanFactory
+	 */
+	public DefaultListableBeanFactory(@Nullable BeanFactory parentBeanFactory) {
+		super(parentBeanFactory);
+	}
+```
+
+这个实现有点绕。在这个例子中是返回了个null给DefaultListableBeanFactory。
+
+最终AbstractRefreshableApplicationContext是调用new DefaultListableBeanFactory(null)，创造的方法。
+
+```java
+这是文件AbstractAutowireCapableBeanFactory的方法方法#####################
+	/**
+	 * autowire : 自动装配<br/>
+	 * Create a new AbstractAutowireCapableBeanFactory.
+	 */
+	public AbstractAutowireCapableBeanFactory() {
+		super();
+		ignoreDependencyInterface(BeanNameAware.class);
+		ignoreDependencyInterface(BeanFactoryAware.class);
+		ignoreDependencyInterface(BeanClassLoaderAware.class);
+	}
+
+	/**
+	 * Create a new AbstractAutowireCapableBeanFactory with the given parent.
+	 * @param parentBeanFactory parent bean factory, or {@code null} if none
+	 */
+	public AbstractAutowireCapableBeanFactory(@Nullable BeanFactory parentBeanFactory) {
+		this();
+		setParentBeanFactory(parentBeanFactory);
+	}
+
+
+	/**
+	 * Dependency interfaces to ignore on dependency check and autowire, as Set of
+	 * Class objects. By default, only the BeanFactory interface is ignored.
+	 */
+	private final Set<Class<?>> ignoredDependencyInterfaces = new HashSet<>();
+	/**
+	 * Ignore the given dependency interface for autowiring.
+	 * <p>This will typically be used by application contexts to register
+	 * dependencies that are resolved in other ways, like BeanFactory through
+	 * BeanFactoryAware or ApplicationContext through ApplicationContextAware.
+	 * <p>By default, only the BeanFactoryAware interface is ignored.
+	 * For further types to ignore, invoke this method for each type.
+	 * @see org.springframework.beans.factory.BeanFactoryAware
+	 * @see org.springframework.context.ApplicationContextAware
+	 */
+	public void ignoreDependencyInterface(Class<?> ifc) {
+		this.ignoredDependencyInterfaces.add(ifc);
+	}
+
+
+	@Override
+	public void setParentBeanFactory(@Nullable BeanFactory parentBeanFactory) {
+		if (this.parentBeanFactory != null && this.parentBeanFactory != parentBeanFactory) {
+			throw new IllegalStateException("Already associated with parent BeanFactory: " + this.parentBeanFactory);
+		}
+		if (this == parentBeanFactory) {
+			throw new IllegalStateException("Cannot set parent bean factory to self");
+		}
+		this.parentBeanFactory = parentBeanFactory;
+	}
+
+这是文件AbstractBeanFactory############################ 组合模式。
+	/** Parent bean factory, for bean inheritance support. */
+	@Nullable
+	private BeanFactory parentBeanFactory;
+
+这是文件AbstractBeanFactory############################
+public AbstractBeanFactory() {
+}
+
+//追踪到这里算是完结了。
+```
+
+最终AbstractBeanFactory初始化，连带着父类们一起初始化。
+
+
+
+BeanFactory先到这里，因为这里面的东西太复杂，不容易一下子吃下这个大胖子。
+
+继续回来看这段代码。
+
+```java
+@Override
+protected final void refreshBeanFactory() throws BeansException {
+    if (hasBeanFactory()) {
+        destroyBeans();
+        closeBeanFactory();
+    }
+    try {
+        DefaultListableBeanFactory beanFactory = createBeanFactory();
+        //看到这里。
+        beanFactory.setSerializationId(getId()); //beanFactory命名。使用的是applicationcontext的id。
+        customizeBeanFactory(beanFactory);
+        loadBeanDefinitions(beanFactory);
+        this.beanFactory = beanFactory;
+    }
+    catch (IOException ex) {
+        throw new ApplicationContextException("I/O error parsing bean definition source for " + getDisplayName(), ex);
+    }
+}
+```
 
 #### BeanFactory定制
 
@@ -569,7 +2005,7 @@ protected void customizeBeanFactory(DefaultListableBeanFactory beanFactory) {
 
 #### Bean加载
 
-AbstractXmlApplicationContext.loadBeanDefinitions，这个便是核心的bean加载了:
+AbstractXmlApplicationContext.loadBeanDefinitions，这个便是**核心的bean加载**了:
 
 ```java
 @Override
@@ -583,11 +2019,27 @@ protected void loadBeanDefinitions(DefaultListableBeanFactory beanFactory) {
     beanDefinitionReader.setEntityResolver(new ResourceEntityResolver(this));
     // Allow a subclass to provide custom initialization of the reader,
     // then proceed with actually loading the bean definitions.
-    //默认空实现
     initBeanDefinitionReader(beanDefinitionReader);
     loadBeanDefinitions(beanDefinitionReader);
 }
+
+
+	/**
+	 * Initialize the bean definition reader used for loading the bean
+	 * definitions of this context. Default implementation is empty.
+	 * <p>Can be overridden in subclasses, e.g. for turning off XML validation
+	 * or using a different XmlBeanDefinitionParser implementation.
+	 * @param reader the bean definition reader used by this context
+	 * @see org.springframework.beans.factory.xml.XmlBeanDefinitionReader#setDocumentReaderClass
+	 */
+protected void initBeanDefinitionReader(XmlBeanDefinitionReader reader) {
+    reader.setValidating(this.validating);
+}
 ```
+
+Environment我们都讲过了，ResourceLoader也说了。
+
+
 
 ##### EntityResolver
 
@@ -595,7 +2047,62 @@ protected void loadBeanDefinitions(DefaultListableBeanFactory beanFactory) {
 
 ![EntityResolver继承体系](images/EntityResolver.jpg)
 
+```java
+public class ResourceEntityResolver extends DelegatingEntityResolver {
+
+	private static final Log logger = LogFactory.getLog(ResourceEntityResolver.class);
+
+	private final ResourceLoader resourceLoader;
+
+
+	/**
+	 * Create a ResourceEntityResolver for the specified ResourceLoader
+	 * (usually, an ApplicationContext).
+	 * @param resourceLoader the ResourceLoader (or ApplicationContext)
+	 * to load XML entity includes with
+	 */
+	public ResourceEntityResolver(ResourceLoader resourceLoader) {
+		super(resourceLoader.getClassLoader());
+		this.resourceLoader = resourceLoader;
+	}
+```
+
+
+
+```java
+public class DelegatingEntityResolver implements EntityResolver {
+
+	/** Suffix for DTD files. */
+	public static final String DTD_SUFFIX = ".dtd";
+
+	/** Suffix for schema definition files. */
+	public static final String XSD_SUFFIX = ".xsd";
+
+
+	private final EntityResolver dtdResolver;
+
+	private final EntityResolver schemaResolver;
+
+
+	/**
+	 * Create a new DelegatingEntityResolver that delegates to
+	 * a default {@link BeansDtdResolver} and a default {@link PluggableSchemaResolver}.
+	 * <p>Configures the {@link PluggableSchemaResolver} with the supplied
+	 * {@link ClassLoader}.
+	 * @param classLoader the ClassLoader to use for loading
+	 * (can be {@code null}) to use the default ClassLoader)
+	 */
+	public DelegatingEntityResolver(@Nullable ClassLoader classLoader) {
+		this.dtdResolver = new BeansDtdResolver();
+		this.schemaResolver = new PluggableSchemaResolver(classLoader);
+	}
+```
+
+
+
 EntityResolver接口在org.xml.sax中定义。DelegatingEntityResolver用于schema和dtd的解析。
+
+EntityResolver就不多看了。
 
 ##### BeanDefinitionReader
 
@@ -619,25 +2126,156 @@ protected void loadBeanDefinitions(XmlBeanDefinitionReader reader) {
         reader.loadBeanDefinitions(configLocations);
     }
 }
+
+/**
+	 * Return an array of Resource objects, referring to the XML bean definition
+	 * files that this context should be built with.
+	 * <p>The default implementation returns {@code null}. Subclasses can override
+	 * this to provide pre-built Resource objects rather than location Strings.
+	 * @return an array of Resource objects, or {@code null} if none
+	 * @see #getConfigLocations()
+	 */
+@Nullable
+protected Resource[] getConfigResources() {
+    return null;
+}
 ```
+
+调用的是reader.loadBeanDefinitions(configResources);
 
 AbstractBeanDefinitionReader.loadBeanDefinitions:
 
 ```java
 @Override
-public int loadBeanDefinitions(String... locations) throws BeanDefinitionStoreException {
-    Assert.notNull(locations, "Location array must not be null");
-    int counter = 0;
-    for (String location : locations) {
-        counter += loadBeanDefinitions(location);
+public int loadBeanDefinitions(Resource... resources) throws BeanDefinitionStoreException {
+    Assert.notNull(resources, "Resource array must not be null");
+    int count = 0;
+    for (Resource resource : resources) {
+        count += loadBeanDefinitions(resource); // 标记#2
     }
-    return counter;
+    return count;
 }
 ```
 
-之后调用:
+这里有一个陷阱：标记#2处的方法其实是可以加载自己的，但是这样就存在着逻辑错误：自旋了。但是idea也没有显示圈圈。如下图：
+
+![image-20200610231521890](Spring.assets/image-20200610231521890.png)
+
+这样就很尴尬了😅。
+
+点击loadBeanDefinitions方法跳到org.springframework.beans.factory.support.BeanDefinitionReader#loadBeanDefinitions(org.springframework.core.io.Resource)
+
+发现这个方法被重载了。
+
+![image-20200610231731184](Spring.assets/image-20200610231731184.png)
+
+重载的arrays优先级比较低。所以优先加载上面那个，上面那个是
+
+![image-20200610232432069](Spring.assets/image-20200610232432069.png)
+
+`XmlBeanDefinitionReader` 文件。
+
+之后调用org.springframework.beans.factory.xml.XmlBeanDefinitionReader#loadBeanDefinitions(org.springframework.core.io.support.EncodedResource):
 
 ```java
+/**
+	 * Load bean definitions from the specified XML file.
+	 * @param resource the resource descriptor for the XML file
+	 * @return the number of bean definitions found
+	 * @throws BeanDefinitionStoreException in case of loading or parsing errors
+	 */
+@Override
+public int loadBeanDefinitions(Resource resource) throws BeanDefinitionStoreException {
+    return loadBeanDefinitions(new EncodedResource(resource));
+}
+
+
+	/**
+	 * Load bean definitions from the specified XML file.
+	 * @param encodedResource the resource descriptor for the XML file,
+	 * allowing to specify an encoding to use for parsing the file
+	 * @return the number of bean definitions found
+	 * @throws BeanDefinitionStoreException in case of loading or parsing errors
+	 */
+	public int loadBeanDefinitions(EncodedResource encodedResource) throws BeanDefinitionStoreException {
+		Assert.notNull(encodedResource, "EncodedResource must not be null");
+		if (logger.isTraceEnabled()) {
+			logger.trace("Loading XML bean definitions from " + encodedResource);
+		}
+
+		Set<EncodedResource> currentResources = this.resourcesCurrentlyBeingLoaded.get();
+
+		if (!currentResources.add(encodedResource)) {
+			throw new BeanDefinitionStoreException(
+					"Detected cyclic loading of " + encodedResource + " - check your import definitions!");
+		}
+
+		try (InputStream inputStream = encodedResource.getResource().getInputStream()) {
+			InputSource inputSource = new InputSource(inputStream);
+			if (encodedResource.getEncoding() != null) {
+				inputSource.setEncoding(encodedResource.getEncoding());
+			}
+			return doLoadBeanDefinitions(inputSource, encodedResource.getResource());
+		}
+		catch (IOException ex) {
+			throw new BeanDefinitionStoreException(
+					"IOException parsing XML document from " + encodedResource.getResource(), ex);
+		}
+		finally {
+			currentResources.remove(encodedResource);
+			if (currentResources.isEmpty()) {
+				this.resourcesCurrentlyBeingLoaded.remove();
+			}
+		}
+	}
+```
+
+看注解是解析xml文件的方法，现在大家都想去掉xml文件，没心情看下面了。这里的重点是doLoadBeanDefinitions方法。
+
+```java
+
+/**
+	 * Load the bean definitions with the given XmlBeanDefinitionReader.
+	 * <p>The lifecycle of the bean factory is handled by the {@link #refreshBeanFactory}
+	 * method; hence this method is just supposed to load and/or register bean definitions.
+	 * @param reader the XmlBeanDefinitionReader to use
+	 * @throws BeansException in case of bean registration errors
+	 * @throws IOException if the required XML document isn't found
+	 * @see #refreshBeanFactory
+	 * @see #getConfigLocations
+	 * @see #getResources
+	 * @see #getResourcePatternResolver
+	 */
+protected void loadBeanDefinitions(XmlBeanDefinitionReader reader) throws BeansException, IOException {
+    Resource[] configResources = getConfigResources();
+    if (configResources != null) {
+        reader.loadBeanDefinitions(configResources);
+    }
+    String[] configLocations = getConfigLocations();
+    if (configLocations != null) {
+        reader.loadBeanDefinitions(configLocations); // # 标记3
+    }
+}
+```
+
+标记3处执行的代码如下：
+
+```java
+@Override
+public int loadBeanDefinitions(String... locations) throws BeanDefinitionStoreException {
+    Assert.notNull(locations, "Location array must not be null");
+    int count = 0;
+    for (String location : locations) {
+        count += loadBeanDefinitions(location);
+    }
+    return count;
+}
+
+@Override
+public int loadBeanDefinitions(String location) throws BeanDefinitionStoreException {
+    return loadBeanDefinitions(location, null);
+}
+
 //第二个参数为空
 public int loadBeanDefinitions(String location, Set<Resource> actualResources) {
     ResourceLoader resourceLoader = getResourceLoader();
@@ -662,7 +2300,7 @@ public int loadBeanDefinitions(String location, Set<Resource> actualResources) {
     else {
         // Can only load single resources by absolute URL.
         Resource resource = resourceLoader.getResource(location);
-        int loadCount = loadBeanDefinitions(resource);
+        int loadCount = loadBeanDefinitions(resource); // 这里还是调用上面的代码👆，同样的。
         if (actualResources != null) {
             actualResources.add(resource);
         }
@@ -681,7 +2319,7 @@ public Resource[] getResources(String locationPattern) throws IOException {
 }
 ```
 
-PathMatchingResourcePatternResolver是ResourceLoader继承体系的一部分。
+PathMatchingResourcePatternResolver是ResourceLoader继承体系的一部分。这部分在上面分析过了。其中最主要的方法如下：
 
 ```java
 @Override
@@ -714,6 +2352,37 @@ public Resource[] getResources(String locationPattern) throws IOException {
         }
     }
 }
+
+protected Resource[] findPathMatchingResources(String locationPattern) throws IOException {
+		String rootDirPath = determineRootDir(locationPattern);
+		String subPattern = locationPattern.substring(rootDirPath.length());
+		Resource[] rootDirResources = getResources(rootDirPath);
+		Set<Resource> result = new LinkedHashSet<>(16);
+		for (Resource rootDirResource : rootDirResources) {
+			rootDirResource = resolveRootDirResource(rootDirResource);
+			URL rootDirUrl = rootDirResource.getURL();
+			if (equinoxResolveMethod != null && rootDirUrl.getProtocol().startsWith("bundle")) {
+				URL resolvedUrl = (URL) ReflectionUtils.invokeMethod(equinoxResolveMethod, null, rootDirUrl);
+				if (resolvedUrl != null) {
+					rootDirUrl = resolvedUrl;
+				}
+				rootDirResource = new UrlResource(rootDirUrl);
+			}
+			if (rootDirUrl.getProtocol().startsWith(ResourceUtils.URL_PROTOCOL_VFS)) {
+				result.addAll(VfsResourceMatchingDelegate.findMatchingResources(rootDirUrl, subPattern, getPathMatcher()));
+			}
+			else if (ResourceUtils.isJarURL(rootDirUrl) || isJarResource(rootDirResource)) {
+				result.addAll(doFindPathMatchingJarResources(rootDirResource, rootDirUrl, subPattern));
+			}
+			else {
+				result.addAll(doFindPathMatchingFileResources(rootDirResource, subPattern));
+			}
+		}
+		if (logger.isTraceEnabled()) {
+			logger.trace("Resolved location pattern [" + locationPattern + "] to resources " + result);
+		}
+		return result.toArray(new Resource[0]);
+	}
 ```
 
 isPattern:
@@ -1034,6 +2703,154 @@ protected void processAliasRegistration(Element ele) {
     getReaderContext().fireAliasRegistered(name, alias, extractSource(ele));
 }
 ```
+
+
+
+
+
+
+
+暂时看到这里，转向看spring boot 加载的三个context。因为现在大家都是用spring boot做web开发，context使用的beanfactory体系都一样，所以不会减少对beanfactory的理解。顺应开发潮流。
+
+看一下springboot的经过我精简的源码：
+
+```java
+
+public static final String DEFAULT_CONTEXT_CLASS = "org.springframework.context."
+    + "annotation.AnnotationConfigApplicationContext";
+
+public static final String DEFAULT_WEB_CONTEXT_CLASS = "org.springframework.boot."
+    + "web.servlet.context.AnnotationConfigServletWebServerApplicationContext";
+
+public static final String DEFAULT_REACTIVE_WEB_CONTEXT_CLASS = "org.springframework."
+"boot.web.reactive.context.AnnotationConfigReactiveWebServerApplicationContext";
+
+private static final String[] WEB_ENVIRONMENT_CLASSES = { "javax.servlet.Servlet", "org.springframework.web.context.ConfigurableWebApplicationContext" };
+
+switch (this.webApplicationType) {
+    case SERVLET:
+        contextClass = Class.forName(DEFAULT_WEB_CONTEXT_CLASS);
+        break;
+    case REACTIVE:
+        contextClass = Class.forName(DEFAULT_REACTIVE_WEB_CONTEXT_CLASS);
+        break;
+    default:
+        contextClass = Class.forName(DEFAULT_CONTEXT_CLASS);
+}
+
+```
+
+
+
+从上面可以看出 Spring boot中
+
+默认模式使用的context是这个—>AnnotationConfigApplicationContext，
+
+SERVLET模式使用的context --->  AnnotationConfigServletWebServerApplicationContext，
+
+REACTIVE模式使用的context—>AnnotationConfigReactiveWebServerApplicationContext
+
+。
+
+其中AnnotationConfigApplicationContext是spring-framework的，其它的都是spring-boot拓展的context。
+
+所有的web都会实现这个接口ConfigurableWebApplicationContext。
+
+
+
+AnnotationConfigServletWebServerApplicationContext 是继承是spring-framework的GenericApplicationContext实现的。
+
+AnnotationConfigServletWebServerApplicationContext 是继承spring-framework的GenericWebApplicationContext实现的。
+
+![image-20200611230915197](Spring.assets/image-20200611230915197.png)
+
+我们先看：AnnotationConfigApplicationContext类。
+
+我找到 `AnnotationConfigApplicationContextTests` 来看看。
+
+例子一：
+
+```java
+class AnnotationConfigApplicationContextTests {
+
+	@Test
+	void scanAndRefresh() {
+		AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
+		context.scan("org.springframework.context.annotation6");
+		context.refresh();
+
+		context.getBean(uncapitalize(ConfigForScanning.class.getSimpleName()));
+		context.getBean("testBean"); // contributed by ConfigForScanning
+		context.getBean(uncapitalize(ComponentForScanning.class.getSimpleName()));
+		context.getBean(uncapitalize(Jsr330NamedForScanning.class.getSimpleName()));
+		Map<String, Object> beans = context.getBeansWithAnnotation(Configuration.class);
+		assertThat(beans).hasSize(1);
+	}
+```
+
+这里先介绍`uncapitalize` 方法：
+
+```java
+
+	public static String capitalize(String str) {
+		return changeFirstCharacterCase(str, true);
+	}
+
+	//Uncapitalize一个String ，改变第一个字母为小写按照Character.toLowerCase(char) 。 没有其他的字母改变
+	public static String uncapitalize(String str) {
+		return changeFirstCharacterCase(str, false);
+	}
+```
+
+这个方法以后可能会用得到记下来。
+
+回归这个测试用例：
+
+居然有这么骚的用法：`Map<String, Object> beans = context.getBeansWithAnnotation(Configuration.class);` 记一下，后面来看这个是怎么实现的。
+
+第一步：
+
+```java
+AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
+```
+
+先看看这个类的继承体系。
+
+![image-20200613123147560](Spring.assets/image-20200613123147560.png)
+
+比较一下前面的classXmlPath
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 从前面的源码可以发现，registry其实就是DefaultListableBeanFactory，它实现了BeanDefinitionRegistry接口。registerAlias方法的实现在SimpleAliasRegistry:
 
@@ -1673,6 +3490,8 @@ AbstractApplicationContext的initMessageSource()方法就是在BeanFactory中查
 
 参考: [学习Spring必学的Java基础知识(8)----国际化信息](http://stamen.iteye.com/blog/1541732)
 
+
+
 ### 事件驱动
 
 此接口代表了Spring的事件驱动(监听器)模式。一个事件驱动包含三部分:
@@ -1803,6 +3622,26 @@ public class EmailRegisterListener implements ApplicationListener<RegisterEvent>
 ```
 
 参考: [详解Spring事件驱动模型](http://jinnianshilongnian.iteye.com/blog/1902886)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ### onRefresh
 

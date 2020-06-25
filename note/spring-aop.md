@@ -90,7 +90,7 @@ public void init() {
 
 # aop:config
 
-此标签用以配置pointcut, advisor, aspect，实例:
+此标签用以配置pointcut(切入点), advisor(顾问，提供意见的人), aspect(部分，方面（从某个角度看）)，实例:
 
 ```xml
 <aop:config>
@@ -157,7 +157,7 @@ AspectJExpressionPointcut类图:
 <aop:advisor id="" order="" advice-ref="aopAdvice" pointcut="" pointcut-ref="" />
 ```
 
-advisor概念是Spring独有的，来自于上古时代，应该是较早时候的aop概念的实现: [AOP Alliance (Java/J2EE AOP standards)](http://aopalliance.sourceforge.net/)。Spring官方的说法: [aop-schema-advisors](http://docs.spring.io/spring/docs/current/spring-framework-reference/html/aop.html#aop-schema-advisors)。
+advisor概上古时代，应该是较早时候的aop概念的实现: [AOP Alliance (Java/J2EE AOP standards)](http://aopalliance.sourceforge.net/)。Spring官方的说法: [aop-schema-advisors](http://docs.spring.io/spring/docs/current/spring-framework-reference/html/aop.html#aop-schema-advisors)。
 
 其相关的包/类就在spring-aop下:
 
@@ -1278,4 +1278,14 @@ if (this.advised.exposeProxy) {
     setProxyContext = true;
 }
 ```
+
+
+
+
+
+
+
+
+
+
 

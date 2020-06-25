@@ -1,0 +1,66 @@
+Classfile /Users/donghaoyuan/workspaces/IdeaProjects/leetcode/target/classes/com/taldh/unkown/Constructor$Test.class
+  Last modified 2020年6月7日; size 517 bytes
+  SHA-256 checksum f5fb1ad2ec578cdb32f8d2d0724e6c5b6a57d154d3e1827726f1bc053b5e547a
+  Compiled from "Constructor.java"
+class com.taldh.unkown.Constructor$Test extends com.taldh.unkown.Constructor
+  minor version: 0
+  major version: 58
+  flags: (0x0020) ACC_SUPER
+  this_class: #19                         // com/taldh/unkown/Constructor$Test
+  super_class: #2                         // com/taldh/unkown/Constructor
+  interfaces: 0, fields: 0, methods: 1, attributes: 3
+Constant pool:
+   #1 = Methodref          #2.#3          // com/taldh/unkown/Constructor."<init>":()V
+   #2 = Class              #4             // com/taldh/unkown/Constructor
+   #3 = NameAndType        #5:#6          // "<init>":()V
+   #4 = Utf8               com/taldh/unkown/Constructor
+   #5 = Utf8               <init>
+   #6 = Utf8               ()V
+   #7 = Fieldref           #8.#9          // java/lang/System.out:Ljava/io/PrintStream;
+   #8 = Class              #10            // java/lang/System
+   #9 = NameAndType        #11:#12        // out:Ljava/io/PrintStream;
+  #10 = Utf8               java/lang/System
+  #11 = Utf8               out
+  #12 = Utf8               Ljava/io/PrintStream;
+  #13 = Methodref          #14.#15        // java/io/PrintStream.println:(Ljava/lang/Object;)V
+  #14 = Class              #16            // java/io/PrintStream
+  #15 = NameAndType        #17:#18        // println:(Ljava/lang/Object;)V
+  #16 = Utf8               java/io/PrintStream
+  #17 = Utf8               println
+  #18 = Utf8               (Ljava/lang/Object;)V
+  #19 = Class              #20            // com/taldh/unkown/Constructor$Test
+  #20 = Utf8               com/taldh/unkown/Constructor$Test
+  #21 = Utf8               Code
+  #22 = Utf8               LineNumberTable
+  #23 = Utf8               LocalVariableTable
+  #24 = Utf8               this
+  #25 = Utf8               Lcom/taldh/unkown/Constructor$Test;
+  #26 = Utf8               SourceFile
+  #27 = Utf8               Constructor.java
+  #28 = Utf8               NestHost
+  #29 = Utf8               InnerClasses
+  #30 = Utf8               Test
+{
+  com.taldh.unkown.Constructor$Test();
+    descriptor: ()V
+    flags: (0x0000)
+    Code:
+      stack=2, locals=1, args_size=1
+         0: aload_0
+         1: invokespecial #1                  // Method com/taldh/unkown/Constructor."<init>":()V
+         4: getstatic     #7                  // Field java/lang/System.out:Ljava/io/PrintStream;
+         7: aload_0
+         8: invokevirtual #13                 // Method java/io/PrintStream.println:(Ljava/lang/Object;)V
+        11: return
+      LineNumberTable:
+        line 19: 0
+        line 20: 4
+        line 21: 11
+      LocalVariableTable:
+        Start  Length  Slot  Name   Signature
+            0      12     0  this   Lcom/taldh/unkown/Constructor$Test;
+}
+SourceFile: "Constructor.java"
+NestHost: class com/taldh/unkown/Constructor
+InnerClasses:
+  static #30= #19 of #2;                  // Test=class com/taldh/unkown/Constructor$Test of class com/taldh/unkown/Constructor
